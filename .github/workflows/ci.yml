@@ -1,0 +1,67 @@
+name: ci
+# Tests the package against the C library release Package.swift names: on Linux with that release's package for the
+# platform (found through its pkg-config file), on the oldest supported Swift and the newest; on macOS through the
+# release's XCFramework, as a package depending on this one gets it, with builds for iOS and the iOS simulator.
+on:
+  push:
+    branches:
+    - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  linux:
+    name: Linux ${{ matrix.arch }}, Swift ${{ matrix.swift }}
+    runs-on: ${{ matrix.os }}
+    container: swift:${{ matrix.swift }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: x86_64, os: ubuntu-latest, target: x86_64-unknown-linux-gnu, swift: '5.9-jammy' }
+          - { arch: x86_64, os: ubuntu-latest, target: x86_64-unknown-linux-gnu, swift: '6.4' }
+          - { arch: aarch64, os: ubuntu-24.04-arm, target: aarch64-unknown-linux-gnu, swift: '6.4' }
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          submodules: true
+      - name: Install the C library
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          (command -v pkg-config && command -v curl) >/dev/null || { apt-get update -qq && apt-get install -y -qq pkg-config curl; }
+          version=$(sed -n 's|.*/releases/download/capi-v\([0-9.]*\)/.*|\1|p' Package.swift)
+          name="corvus-json-schema-$version-$TARGET"
+          curl -sSfL "https://github.com/corvus-dotnet/Corvus.JsonSchema/releases/download/capi-v$version/$name.tar.gz" | tar -xz -C /opt
+          echo "PKG_CONFIG_PATH=/opt/$name/lib/pkgconfig" >> "$GITHUB_ENV"
+          echo "LD_LIBRARY_PATH=/opt/$name/lib" >> "$GITHUB_ENV"
+      - name: Test
+        run: |
+          swift build -Xswiftc -warnings-as-errors
+          swift test
+
+  apple:
+    name: macOS, iOS
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          submodules: true
+      - name: Test
+        run: |
+          swift --version
+          swift build -Xswiftc -warnings-as-errors
+          swift test
+      - name: Build for iOS and the iOS simulator
+        run: |
+          xcodebuild build -quiet -scheme CorvusJsonSchema -destination 'generic/platform=iOS'
+          xcodebuild build -quiet -scheme CorvusJsonSchema -destination 'generic/platform=iOS Simulator'

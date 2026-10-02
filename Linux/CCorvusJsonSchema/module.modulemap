@@ -1,0 +1,5 @@
+module CCorvusJsonSchema [system] {
+    header "shim.h"
+    link "corvus_json_schema"
+    export *
+}
