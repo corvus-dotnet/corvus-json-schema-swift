@@ -62,6 +62,7 @@ jobs:
           swift build -Xswiftc -warnings-as-errors
           swift test
       - name: Build for iOS and the iOS simulator
+        # SwiftPM builds for each from its SDK (no Xcode scheme needed).
         run: |
-          xcodebuild build -quiet -scheme CorvusJsonSchema -destination 'generic/platform=iOS'
-          xcodebuild build -quiet -scheme CorvusJsonSchema -destination 'generic/platform=iOS Simulator'
+          swift build --sdk "$(xcrun --sdk iphoneos --show-sdk-path)" --triple arm64-apple-ios13.0 --build-path .build-ios
+          swift build --sdk "$(xcrun --sdk iphonesimulator --show-sdk-path)" --triple arm64-apple-ios13.0-simulator --build-path .build-ios-simulator
