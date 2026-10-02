@@ -8,7 +8,7 @@ import PackageDescription
 let cLibrary: Target = .binaryTarget(
     name: "CCorvusJsonSchema",
     url: "https://github.com/corvus-dotnet/Corvus.JsonSchema/releases/download/capi-v0.1.1/CorvusJsonSchema.xcframework.zip",
-    checksum: "0000000000000000000000000000000000000000000000000000000000000000"
+    checksum: "dd677f4f2c0b3e60e096276fdd124c2bfecc3d0af624f2f79a8b7b0c09fa66cc"
 )
 #else
 let cLibrary: Target = .systemLibrary(
