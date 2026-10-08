@@ -18,6 +18,17 @@ final class APITests: XCTestCase {
         XCTAssertTrue(try Validator(schema: Data(person.utf8)).isValid(json: #"{"name": "Ada"}"#))
     }
 
+    /// A pattern whose class has a member outside ASCII (U+00E9). The C library before 0.1.2 kept the class as bits
+    /// for ASCII characters and read that member as two of them (C and a closing parenthesis), so it gave the wrong
+    /// answers here.
+    func testPatternClassWithAMemberOutsideASCII() throws {
+        let validator = try Validator(schema: #"{"pattern": "^(?=[^é]+$)(?=(.*\\w)).+$"}"#)
+        XCTAssertTrue(try validator.isValid(json: #""C1""#))
+        XCTAssertTrue(try validator.isValid(json: #"")a""#))
+        XCTAssertFalse(try validator.isValid(json: #""é1""#))
+        XCTAssertFalse(try validator.isValid(json: #""---""#))
+    }
+
     func testDocuments() throws {
         let validator = try Validator(schema: person)
         let valid = try Document(json: #"{"name": "Ada"}"#)
