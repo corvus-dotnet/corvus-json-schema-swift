@@ -35,9 +35,9 @@ On Linux, install the C library first: download the package for your platform
 make its pkg-config file and shared library findable:
 
 ```sh
-tar -xzf corvus-json-schema-0.1.1-x86_64-unknown-linux-gnu.tar.gz -C /opt
-export PKG_CONFIG_PATH=/opt/corvus-json-schema-0.1.1-x86_64-unknown-linux-gnu/lib/pkgconfig
-export LD_LIBRARY_PATH=/opt/corvus-json-schema-0.1.1-x86_64-unknown-linux-gnu/lib
+tar -xzf corvus-json-schema-0.1.2-x86_64-unknown-linux-gnu.tar.gz -C /opt
+export PKG_CONFIG_PATH=/opt/corvus-json-schema-0.1.2-x86_64-unknown-linux-gnu/lib/pkgconfig
+export LD_LIBRARY_PATH=/opt/corvus-json-schema-0.1.2-x86_64-unknown-linux-gnu/lib
 ```
 
 (or copy its `include` and `lib` into `/usr/local` and run `ldconfig`).
