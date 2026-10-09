@@ -18,6 +18,28 @@ final class APITests: XCTestCase {
         XCTAssertTrue(try Validator(schema: Data(person.utf8)).isValid(json: #"{"name": "Ada"}"#))
     }
 
+    /// A `not` that leads back to the schema it is in recurses in place like any other applicator, and stops at the
+    /// maximum depth. The C library before 0.1.3 evaluated `not` around the depth guard, so the first of these
+    /// schemas overflowed the stack, which ends the process.
+    func testNotOnAnInPlaceCycleStopsAtTheMaximumDepth() throws {
+        let schemas = [
+            ##"{"not": {"$ref": "#"}}"##,
+            ##"{"not": {"not": {"$ref": "#"}}}"##,
+            ##"{"allOf": [{"not": {"$ref": "#"}}]}"##,
+            ##"{"$defs": {"loop": {"allOf": [{"$ref": "#/$defs/loop"}]}}, "not": {"$ref": "#/$defs/loop"}}"##,
+        ]
+        for schema in schemas {
+            let validator = try Validator(schema: schema, options: Options(maxDepth: 16))
+            for instance in ["1", ##"{"a": 1}"##] {
+                XCTAssertThrowsError(try validator.isValid(json: instance), schema) { error in
+                    guard case JSONSchemaError.depthExceeded = error else {
+                        return XCTFail("\(schema): \(error)")
+                    }
+                }
+            }
+        }
+    }
+
     /// A pattern whose class has a member outside ASCII (U+00E9). The C library before 0.1.2 kept the class as bits
     /// for ASCII characters and read that member as two of them (C and a closing parenthesis), so it gave the wrong
     /// answers here.

@@ -7,8 +7,8 @@ import PackageDescription
 #if canImport(Darwin)
 let cLibrary: Target = .binaryTarget(
     name: "CCorvusJsonSchema",
-    url: "https://github.com/corvus-dotnet/Corvus.JsonSchema/releases/download/capi-v0.1.2/CorvusJsonSchema.xcframework.zip",
-    checksum: "f14152293aee6f528879e208dfd4df5b136283f3662783c646f57895444cf6a9"
+    url: "https://github.com/corvus-dotnet/Corvus.JsonSchema/releases/download/capi-v0.1.3/CorvusJsonSchema.xcframework.zip",
+    checksum: "1c8bec2a82635b39045a6b9e5ce2defb29cc060a1cfcfaa4b13854ac3ef0e8b1"
 )
 #else
 let cLibrary: Target = .systemLibrary(
