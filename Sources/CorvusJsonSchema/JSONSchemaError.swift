@@ -10,8 +10,14 @@ public enum JSONSchemaError: Error, Sendable, Equatable, CustomStringConvertible
     case invalidJSON(String, offset: Int)
     /// A schema that does not compile: invalid, or with a reference that cannot be resolved.
     case compilationFailed(String)
+    /// A schema with a regular expression over a limit of size (1,048,576 bytes of pattern, 1,000 levels of groups,
+    /// or 1,048,576 counted for it as it is read). A regular expression that is not valid is `compilationFailed`.
+    case patternTooLarge(String)
     /// An evaluation that recursed in place beyond the maximum depth.
     case depthExceeded(String)
+    /// A match of a regular expression that reached `Options.patternMatchLimit`, or whose backtracking held 1,048,576
+    /// entries. The instance is then neither valid nor not valid. The message names the pattern and the limit.
+    case patternMatchLimit(String)
     /// A bug in the library.
     case internalError(String)
 
@@ -21,7 +27,9 @@ public enum JSONSchemaError: Error, Sendable, Equatable, CustomStringConvertible
         case .invalidUTF8(let m, let offset): return "invalid UTF-8 at byte \(offset): \(m)"
         case .invalidJSON(let m, let offset): return "invalid JSON at byte \(offset): \(m)"
         case .compilationFailed(let m): return "compilation failed: \(m)"
+        case .patternTooLarge(let m): return "pattern too large: \(m)"
         case .depthExceeded(let m): return "depth exceeded: \(m)"
+        case .patternMatchLimit(let m): return "pattern match limit: \(m)"
         case .internalError(let m): return "internal error: \(m)"
         }
     }
@@ -40,6 +48,8 @@ func check(_ status: cjs_status) throws {
     case CJS_INVALID_JSON: throw JSONSchemaError.invalidJSON(message, offset: offset)
     case CJS_COMPILATION_FAILED: throw JSONSchemaError.compilationFailed(message)
     case CJS_DEPTH_EXCEEDED: throw JSONSchemaError.depthExceeded(message)
+    case CJS_PATTERN_MATCH_LIMIT: throw JSONSchemaError.patternMatchLimit(message)
+    case CJS_PATTERN_TOO_LARGE: throw JSONSchemaError.patternTooLarge(message)
     default: throw JSONSchemaError.internalError(message)
     }
 }

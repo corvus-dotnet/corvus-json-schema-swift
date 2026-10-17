@@ -51,6 +51,103 @@ final class APITests: XCTestCase {
         XCTAssertFalse(try validator.isValid(json: #""---""#))
     }
 
+    /// A pattern that backtracks without end on `neverAnswered`.
+    let neverAnswers = #"^(?:(a+)\\1*)+$"#
+    let neverAnswered = String(repeating: "a", count: 60) + "b"
+
+    /// A match that reaches its limit throws, and is never an answer. The C library before 0.1.4 had no limit, and
+    /// such a match did not end.
+    func testAMatchThatReachesItsLimitThrows() throws {
+        let validator = try Validator(
+            schema: #"{"pattern": "\#(neverAnswers)"}"#, options: Options(patternMatchLimit: 0.05))
+        let document = try Document(json: #""\#(neverAnswered)""#)
+        let collector = Collector()
+        let checks: [() throws -> Bool] = [
+            { try validator.isValid(json: #""\#(self.neverAnswered)""#) },
+            { try validator.isValid(document) },
+            { try validator.evaluate(document, collector: collector) },
+        ]
+        for check in checks {
+            let start = DispatchTime.now().uptimeNanoseconds
+            XCTAssertThrowsError(try check()) { error in
+                guard case JSONSchemaError.patternMatchLimit(let message) = error else {
+                    return XCTFail("\(error)")
+                }
+                XCTAssertTrue(message.contains("50ms"), message)
+            }
+            let took = Double(DispatchTime.now().uptimeNanoseconds - start) / 1e9
+            XCTAssertGreaterThanOrEqual(took, 0.04)
+            XCTAssertLessThan(took, 20)
+        }
+        XCTAssertTrue(try validator.isValid(json: #""aaaa""#))
+        XCTAssertFalse(try validator.isValid(json: #""b""#))
+    }
+
+    /// The default is one second, and `nil`, zero or less turns the limit off: the match runs to its end.
+    func testTheDefaultMatchLimitIsOneSecondAndCanBeTurnedOff() throws {
+        XCTAssertEqual(Options.defaultPatternMatchLimit, 1)
+        XCTAssertEqual(Options().patternMatchLimit, 1)
+        let validator = try Validator(schema: #"{"patternProperties": {"\#(neverAnswers)": {"type": "integer"}}}"#)
+        let start = DispatchTime.now().uptimeNanoseconds
+        XCTAssertThrowsError(try validator.isValid(json: #"{"\#(neverAnswered)": 1}"#)) { error in
+            guard case JSONSchemaError.patternMatchLimit(let message) = error else {
+                return XCTFail("\(error)")
+            }
+            XCTAssertTrue(message.contains("1s"), message)
+        }
+        let took = Double(DispatchTime.now().uptimeNanoseconds - start) / 1e9
+        XCTAssertGreaterThanOrEqual(took, 0.9)
+        XCTAssertLessThan(took, 21)
+        for off: TimeInterval? in [nil, 0, -1] {
+            let unlimited = try Validator(
+                schema: #"{"pattern": "\#(neverAnswers)"}"#, options: Options(patternMatchLimit: off))
+            XCTAssertFalse(try unlimited.isValid(json: #""\#(String(repeating: "a", count: 14))b""#))
+        }
+    }
+
+    /// A match whose backtracking reaches its memory limit throws the same error.
+    func testAMatchThatReachesItsMemoryLimitThrows() throws {
+        let validator = try Validator(schema: #"{"pattern": "(?:a?){2147483647}"}"#)
+        XCTAssertThrowsError(try validator.isValid(json: #""""#)) { error in
+            guard case JSONSchemaError.patternMatchLimit(let message) = error else {
+                return XCTFail("\(error)")
+            }
+            XCTAssertTrue(message.contains("1,048,576 backtracking entries"), message)
+        }
+    }
+
+    /// A pattern over a limit of size is refused as too large, and not as not valid.
+    func testAPatternOverALimitOfSizeIsNotAnInvalidPattern() throws {
+        func nest(_ depth: Int) -> String {
+            String(repeating: "(?:", count: depth) + "a" + String(repeating: ")", count: depth)
+        }
+        let limits = [
+            (String(repeating: "a", count: 16_384), String(repeating: "a", count: 16_385),
+             "the pattern has a size of more than 1048576 bytes when it is read"),
+            (nest(999), nest(1000), "the groups of the pattern nest more than 1000 deep"),
+        ]
+        for (at, over, reason) in limits {
+            _ = try Validator(schema: #"{"pattern": "\#(at)"}"#)
+            for schema in [#"{"pattern": "\#(over)"}"#, #"{"patternProperties": {"\#(over)": true}}"#] {
+                XCTAssertThrowsError(try Validator(schema: schema)) { error in
+                    guard case JSONSchemaError.patternTooLarge(let message) = error else {
+                        return XCTFail("\(error)")
+                    }
+                    XCTAssertTrue(
+                        message.hasSuffix("is too large to read as an ECMA-262 regular expression: \(reason)."), message)
+                    XCTAssertFalse(message.lowercased().contains("invalid"), message)
+                    XCTAssertLessThan(message.count, 400)
+                }
+            }
+        }
+        XCTAssertThrowsError(try Validator(schema: #"{"pattern": "a**"}"#)) { error in
+            guard case JSONSchemaError.compilationFailed(let message) = error else {
+                return XCTFail("\(error)")
+            }
+            XCTAssertTrue(message.hasPrefix("Invalid regular expression"), message)
+        }
+    }
+
     func testDocuments() throws {
         let validator = try Validator(schema: person)
         let valid = try Document(json: #"{"name": "Ada"}"#)

@@ -35,9 +35,9 @@ On Linux, install the C library first: download the package for your platform
 make its pkg-config file and shared library findable:
 
 ```sh
-tar -xzf corvus-json-schema-0.1.3-x86_64-unknown-linux-gnu.tar.gz -C /opt
-export PKG_CONFIG_PATH=/opt/corvus-json-schema-0.1.3-x86_64-unknown-linux-gnu/lib/pkgconfig
-export LD_LIBRARY_PATH=/opt/corvus-json-schema-0.1.3-x86_64-unknown-linux-gnu/lib
+tar -xzf corvus-json-schema-0.1.4-x86_64-unknown-linux-gnu.tar.gz -C /opt
+export PKG_CONFIG_PATH=/opt/corvus-json-schema-0.1.4-x86_64-unknown-linux-gnu/lib/pkgconfig
+export LD_LIBRARY_PATH=/opt/corvus-json-schema-0.1.4-x86_64-unknown-linux-gnu/lib
 ```
 
 (or copy its `include` and `lib` into `/usr/local` and run `ldconfig`).
@@ -72,6 +72,7 @@ for result in collector.results where !result.isMatch {
 | `baseURI` | `nil` | The schema's base URI, when it has no `$id`. |
 | `entryPoint` | `nil` | A reference to the subschema to validate against, such as `"#/$defs/item"`. |
 | `maxDepth` | `128` | The deepest the evaluator recurses in place before it throws `depthExceeded`. |
+| `patternMatchLimit` | `1` | The seconds one match of a regular expression against one string may take before the call throws `patternMatchLimit`. `nil` or `0` turns the limit off. |
 | `formats` | `[:]` | Custom formats: name to a closure that returns whether the string is valid. They run on whichever thread validates. |
 | `resolver` | `nil` | A closure from an absolute URI to the document's JSON text, or `nil` when it has none. An error it throws is thrown by the compilation. |
 
@@ -86,7 +87,14 @@ A `Validator` is immutable and `Sendable`: share one between threads.
   evaluation as JSON text, and `clear()` empties it. A collector is used by one thread at a time.
 
 Errors are `JSONSchemaError`: `invalidJSON` and `invalidUTF8` (with the byte offset), `compilationFailed`,
-`depthExceeded`, `invalidArgument` and `internalError`. `Validator.libraryVersion` is the C library's version.
+`patternTooLarge`, `depthExceeded`, `patternMatchLimit`, `invalidArgument` and `internalError`.
+
+A schema and an instance may both come from outside, so a regular expression is bounded in what it costs. A match of
+a `pattern` or `patternProperties` regular expression that takes longer than `patternMatchLimit` is abandoned, and the
+call throws `patternMatchLimit`: the instance is then neither valid nor not valid. Compiling can throw it too, because
+a pattern of `patternProperties` is matched against the property names the schema declares. A schema with a regular
+expression longer than 1,048,576 bytes, nested more than 1,000 groups deep or of more than about 16,000 terms does not
+compile, and throws `patternTooLarge`. `Validator.libraryVersion` is the C library's version.
 
 ## Development
 
