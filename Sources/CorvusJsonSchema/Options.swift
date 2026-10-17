@@ -37,12 +37,19 @@ public struct Options: Sendable {
     public var entryPoint: String?
     /// The maximum depth of in-place recursion on a cycle before evaluation is abandoned (`DepthExceeded`).
     public var maxDepth: UInt32 = 128
+    /// The seconds one match of a `pattern` or `patternProperties` regular expression against one string may take. A
+    /// match that takes longer is abandoned, and the call throws `patternMatchLimit`. `nil`, or zero or less, turns the
+    /// limit off, for a caller who trusts both the schema and the instances. The limit is on each match.
+    public var patternMatchLimit: TimeInterval? = Options.defaultPatternMatchLimit
     /// Custom format assertions, by format name: whether the string (or, for a number, its JSON text) is valid. They
     /// run during validation, on whichever thread validates.
     public var formats: [String: @Sendable (String) -> Bool] = [:]
     /// The resolver for documents other than the standard metaschemas: for an absolute URI, the document's JSON text,
     /// or `nil` for an unknown document. It runs during compilation; an error it throws is thrown by the compilation.
     public var resolver: (@Sendable (String) throws -> String?)?
+
+    /// The default of `patternMatchLimit`: one second.
+    public static let defaultPatternMatchLimit: TimeInterval = 1
 
     public init(
         defaultDialect: Dialect = .draft202012,
@@ -52,6 +59,7 @@ public struct Options: Sendable {
         baseURI: String? = nil,
         entryPoint: String? = nil,
         maxDepth: UInt32 = 128,
+        patternMatchLimit: TimeInterval? = Options.defaultPatternMatchLimit,
         formats: [String: @Sendable (String) -> Bool] = [:],
         resolver: (@Sendable (String) throws -> String?)? = nil
     ) {
@@ -62,8 +70,19 @@ public struct Options: Sendable {
         self.baseURI = baseURI
         self.entryPoint = entryPoint
         self.maxDepth = maxDepth
+        self.patternMatchLimit = patternMatchLimit
         self.formats = formats
         self.resolver = resolver
+    }
+
+    /// A limit in seconds as the C library's milliseconds, where 0 is no limit. A limit under a millisecond is one
+    /// millisecond, so that it is still a limit.
+    static func milliseconds(_ seconds: TimeInterval?) -> UInt64 {
+        guard let seconds, seconds > 0 else {
+            return 0
+        }
+        let milliseconds = (seconds * 1000).rounded(.up)
+        return milliseconds >= Double(UInt64.max) ? UInt64.max : UInt64(milliseconds)
     }
 
     /// Sets the C options; returns the resolver's box, which holds the error a Swift resolver threw.
@@ -80,6 +99,7 @@ public struct Options: Sendable {
             try check(entryPoint.withUTF8 { cjs_options_set_entry_point(options, pointer($0), $0.count) })
         }
         try check(cjs_options_set_max_depth(options, maxDepth))
+        try check(cjs_options_set_pattern_match_limit_ms(options, Options.milliseconds(patternMatchLimit)))
         for (name, format) in formats {
             var name = name
             // The box is released when the options and every validator compiled with them have been freed.
